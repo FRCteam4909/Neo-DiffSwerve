@@ -1,132 +1,129 @@
-// Copyright (c) FIRST and other WPILib contributors.
-// Open Source Software; you can modify and/or share it under the terms of
-// the WPILib BSD license file in the root directory of this project.
+/*----------------------------------------------------------------------------*/
+/* Copyright (c) 2017-2018 FIRST. All Rights Reserved.                        */
+/* Open Source Software - may be modified and shared by FRC teams. The code   */
+/* must be accompanied by the FIRST BSD license file in the root directory of */
+/* the project.                                                               */
+/*----------------------------------------------------------------------------*/
 
 package frc.robot;
 
-import com.revrobotics.CANSparkMax;
-import com.revrobotics.CANSparkMaxLowLevel.MotorType;
-
-import edu.wpi.first.wpilibj.CounterBase;
-import edu.wpi.first.wpilibj.Encoder;
+import edu.wpi.first.wpilibj.Joystick;
 import edu.wpi.first.wpilibj.TimedRobot;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 
+import com.revrobotics.CANEncoder;
+import com.revrobotics.CANPIDController;
+import com.revrobotics.CANSparkMax;
+import com.revrobotics.ControlType;
+import com.revrobotics.CANSparkMaxLowLevel.MotorType;
+
 /**
- * Sample program displaying the value of a quadrature encoder on the SmartDashboard. Quadrature
- * Encoders are digital sensors which can detect the amount the encoder has rotated since starting
- * as well as the direction in which the encoder shaft is rotating. However, encoders can not tell
- * you the absolute position of the encoder shaft (ie, it considers where it starts to be the zero
- * position, no matter where it starts), and so can only tell you how much the encoder has rotated
- * since starting. Depending on the precision of an encoder, it will have fewer or greater ticks per
- * revolution; the number of ticks per revolution will affect the conversion between ticks and
- * distance, as specified by DistancePerPulse. One of the most common uses of encoders is in the
- * drivetrain, so that the distance that the robot drives can be precisely controlled during the
- * autonomous mode.
+ * This is a demo program showing the use of the RobotDrive class, specifically
+ * it contains the code necessary to operate a robot with tank drive.
  */
 public class Robot extends TimedRobot {
-  /**
-   * The Encoder object is constructed with 4 parameters, the last two being optional. The first two
-   * parameters (1, 2 in this case) refer to the ports on the roboRIO which the encoder uses.
-   * Because a quadrature encoder has two signal wires, the signal from two DIO ports on the roboRIO
-   * are used. The third (optional) parameter is a boolean which defaults to false. If you set this
-   * parameter to true, the direction of the encoder will be reversed, in case it makes more sense
-   * mechanically. The final (optional) parameter specifies encoding rate (k1X, k2X, or k4X) and
-   * defaults to k4X. Faster (k4X) encoding gives greater positional precision but more noise in the
-   * rate.
-   */
-  private final Encoder m_encoder = new Encoder(0, 1, false, CounterBase.EncodingType.k4X);
-
-  private final CANSparkMax m_neoA = new CANSparkMax(1, MotorType.kBrushless);
-  private final CANSparkMax m_neoB = new CANSparkMax(2, MotorType.kBrushless);
-
-  private final String keyNameA = "speedA";
-  private final String keyNameB = "speedB";
-
+  private Joystick m_stick;
+  private static final int deviceID = 1;
+  private CANSparkMax m_motor;
+  private CANPIDController m_pidController;
+  private CANEncoder m_encoder;
+  public double kP, kI, kD, kIz, kFF, kMaxOutput, kMinOutput, maxRPM;
 
   @Override
   public void robotInit() {
-    /*
-     * Defines the number of samples to average when determining the rate.
-     * On a quadrature encoder, values range from 1-255;
-     * larger values result in smoother but potentially
-     * less accurate rates than lower values.
+    m_stick = new Joystick(0);
+
+    // initialize motor
+    m_motor = new CANSparkMax(deviceID, MotorType.kBrushless);
+
+    /**
+     * The RestoreFactoryDefaults method can be used to reset the configuration parameters
+     * in the SPARK MAX to their factory default state. If no argument is passed, these
+     * parameters will not persist between power cycles
      */
-    m_encoder.setSamplesToAverage(5);
+    m_motor.restoreFactoryDefaults();
 
-    /*
-     * Defines how far the mechanism attached to the encoder moves per pulse. In
-     * this case, we assume that a 360 count encoder is directly
-     * attached to a 3 inch diameter (1.5inch radius) wheel,
-     * and that we want to measure distance in inches.
+    /**
+     * In order to use PID functionality for a controller, a CANPIDController object
+     * is constructed by calling the getPIDController() method on an existing
+     * CANSparkMax object
      */
-    m_encoder.setDistancePerPulse(1.0 / 360.0 * 2.0 * Math.PI * 1.5);
+    m_pidController = m_motor.getPIDController();
 
-    /*
-     * Defines the lowest rate at which the encoder will
-     * not be considered stopped, for the purposes of
-     * the GetStopped() method. Units are in distance / second,
-     * where distance refers to the units of distance
-     * that you are using, in this case inches.
-     */
-    m_encoder.setMinRate(1.0);
+    // Encoder object created to display position values
+    m_encoder = m_motor.getEncoder();
 
-    SmartDashboard.putNumber(keyNameA, 0);
-    SmartDashboard.putNumber(keyNameB, 0);
-    SmartDashboard.putBoolean("ResetCounts", false);
-    SmartDashboard.putBoolean("Start", false);
-    SmartDashboard.putBoolean("Stop", false);
-    
-  }
+    // PID coefficients
+    kP = 6e-5; 
+    kI = 0;
+    kD = 0; 
+    kIz = 0; 
+    kFF = 0.000015; 
+    kMaxOutput = .3; 
+    kMinOutput = -.3;
+    maxRPM = 5700;
 
-  @Override
-  public void disabledPeriodic() {
-    
+    // set PID coefficients
+    m_pidController.setP(kP);
+    m_pidController.setI(kI);
+    m_pidController.setD(kD);
+    m_pidController.setIZone(kIz);
+    m_pidController.setFF(kFF);
+    m_pidController.setOutputRange(kMinOutput, kMaxOutput);
+
+    // display PID coefficients on SmartDashboard
+    SmartDashboard.putNumber("P Gain", kP);
+    SmartDashboard.putNumber("I Gain", kI);
+    SmartDashboard.putNumber("D Gain", kD);
+    SmartDashboard.putNumber("I Zone", kIz);
+    SmartDashboard.putNumber("Feed Forward", kFF);
+    SmartDashboard.putNumber("Max Output", kMaxOutput);
+    SmartDashboard.putNumber("Min Output", kMinOutput);
+    SmartDashboard.putNumber("SetPoint", 0.0);
   }
 
   @Override
   public void teleopPeriodic() {
+    // read PID coefficients from SmartDashboard
+    double p = SmartDashboard.getNumber("P Gain", 0);
+    double i = SmartDashboard.getNumber("I Gain", 0);
+    double d = SmartDashboard.getNumber("D Gain", 0);
+    double iz = SmartDashboard.getNumber("I Zone", 0);
+    double ff = SmartDashboard.getNumber("Feed Forward", 0);
+    double max = SmartDashboard.getNumber("Max Output", 0);
+    double min = SmartDashboard.getNumber("Min Output", 0);
+
+    // if PID coefficients on SmartDashboard have changed, write new values to controller
+    if((p != kP)) { m_pidController.setP(p); kP = p; }
+    if((i != kI)) { m_pidController.setI(i); kI = i; }
+    if((d != kD)) { m_pidController.setD(d); kD = d; }
+    if((iz != kIz)) { m_pidController.setIZone(iz); kIz = iz; }
+    if((ff != kFF)) { m_pidController.setFF(ff); kFF = ff; }
+    if((max != kMaxOutput) || (min != kMinOutput)) { 
+      m_pidController.setOutputRange(min, max); 
+      kMinOutput = min; kMaxOutput = max; 
+    }
+
+    /**
+     * PIDController objects are commanded to a set point using the 
+     * SetReference() method.
+     * 
+     * The first parameter is the value of the set point, whose units vary
+     * depending on the control type set in the second parameter.
+     * 
+     * The second parameter is the control type can be set to one of four 
+     * parameters:
+     *  com.revrobotics.ControlType.kDutyCycle
+     *  com.revrobotics.ControlType.kPosition
+     *  com.revrobotics.ControlType.kVelocity
+     *  com.revrobotics.ControlType.kVoltage
+     */
+    double setPoint = SmartDashboard.getNumber("SetPoint", 0);
+    SmartDashboard.putNumber("SetSetPoint", setPoint);
+    //m_stick.getY()*maxRPM;
+    m_pidController.setReference(setPoint, ControlType.kVelocity);
     
-
-    double a = SmartDashboard.getNumber(keyNameA, 0);
-    double b = SmartDashboard.getNumber(keyNameB, 0);
-
-    m_neoA.set(a);
-    m_neoB.set(b);
-    
+    // SmartDashboard.putNumber("SetPoint", setPoint);
+    SmartDashboard.putNumber("ProcessVariable", m_encoder.getVelocity());
   }
-
-  @Override
-  public void robotPeriodic() {
-    SmartDashboard.putNumber("Encoder Distance", m_encoder.getDistance());
-    SmartDashboard.putNumber("Encoder Rate", m_encoder.getRate());
-
-    SmartDashboard.putNumber("Neo A", m_neoA.getEncoder().getPosition());
-    SmartDashboard.putNumber("Neo B", -1 * m_neoB.getEncoder().getPosition());
-
-    SmartDashboard.putNumber("Neo A Vel", m_neoA.getEncoder().getVelocity());
-    SmartDashboard.putNumber("Neo B Vel", -1 * m_neoB.getEncoder().getVelocity());
-
-    SmartDashboard.putNumber("Neo Vel Diff", -1 * m_neoB.getEncoder().getVelocity() - m_neoA.getEncoder().getVelocity());
-
-    if (SmartDashboard.getBoolean("ResetCounts", false)) {
-      m_neoA.getEncoder().setPosition(0);
-      m_neoB.getEncoder().setPosition(0);
-      m_encoder.reset();
-      SmartDashboard.putBoolean("ResetCounts", false);
-    }
-    if (SmartDashboard.getBoolean("Start", false)) {
-      SmartDashboard.putNumber(keyNameA, -.2);
-      SmartDashboard.putNumber(keyNameB, .2);
-      SmartDashboard.putBoolean("Start", false);
-    }
-
-    if (SmartDashboard.getBoolean("Stop", false)) {
-      SmartDashboard.putNumber(keyNameA, 0);
-      SmartDashboard.putNumber(keyNameB, 0);
-      SmartDashboard.putBoolean("Stop", false);
-    }
-  }
-
-  
 }
