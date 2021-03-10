@@ -7,6 +7,7 @@
 
 package frc.robot;
 
+import edu.wpi.first.wpilibj.Joystick;
 import edu.wpi.first.wpilibj.TimedRobot;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 
@@ -16,20 +17,27 @@ import com.revrobotics.CANSparkMax;
 import com.revrobotics.ControlType;
 import com.revrobotics.CANSparkMaxLowLevel.MotorType;
 
+/**
+ * This is a demo program showing the use of the RobotDrive class, specifically
+ * it contains the code necessary to operate a robot with tank drive.
+ */
 public class Robot extends TimedRobot {
+  private Joystick m_stick;
   private static final int deviceID = 1;
   private CANSparkMax m_motor;
   private CANPIDController m_pidController;
   private CANEncoder m_encoder;
-  public double kP, kI, kD, kIz, kFF, kMaxOutput, kMinOutput;
+  public double kP, kI, kD, kIz, kFF, kMaxOutput, kMinOutput, maxRPM;
 
   @Override
   public void robotInit() {
+    m_stick = new Joystick(0);
+
     // initialize motor
     m_motor = new CANSparkMax(deviceID, MotorType.kBrushless);
 
     /**
-     * The restoreFactoryDefaults method can be used to reset the configuration parameters
+     * The RestoreFactoryDefaults method can be used to reset the configuration parameters
      * in the SPARK MAX to their factory default state. If no argument is passed, these
      * parameters will not persist between power cycles
      */
@@ -46,13 +54,14 @@ public class Robot extends TimedRobot {
     m_encoder = m_motor.getEncoder();
 
     // PID coefficients
-    kP = 0.1; 
-    kI = 1e-4;
-    kD = 1; 
+    kP = 6e-5; 
+    kI = 0;
+    kD = 0; 
     kIz = 0; 
-    kFF = 0; 
+    kFF = 0.000015; 
     kMaxOutput = .3; 
     kMinOutput = -.3;
+    maxRPM = 5700;
 
     // set PID coefficients
     m_pidController.setP(kP);
@@ -70,7 +79,12 @@ public class Robot extends TimedRobot {
     SmartDashboard.putNumber("Feed Forward", kFF);
     SmartDashboard.putNumber("Max Output", kMaxOutput);
     SmartDashboard.putNumber("Min Output", kMinOutput);
-    SmartDashboard.putNumber("Set Rotations", 0);
+    SmartDashboard.putNumber("Desired Velocity", 0.0);
+
+    SmartDashboard.putBoolean("1500", false);
+    SmartDashboard.putBoolean("1000", false);
+    SmartDashboard.putBoolean("500", false);
+    SmartDashboard.putBoolean("0", false);
   }
 
   @Override
@@ -83,7 +97,6 @@ public class Robot extends TimedRobot {
     double ff = SmartDashboard.getNumber("Feed Forward", 0);
     double max = SmartDashboard.getNumber("Max Output", 0);
     double min = SmartDashboard.getNumber("Min Output", 0);
-    double rotations = SmartDashboard.getNumber("Set Rotations", 0);
 
     // if PID coefficients on SmartDashboard have changed, write new values to controller
     if((p != kP)) { m_pidController.setP(p); kP = p; }
@@ -110,9 +123,30 @@ public class Robot extends TimedRobot {
      *  com.revrobotics.ControlType.kVelocity
      *  com.revrobotics.ControlType.kVoltage
      */
-    m_pidController.setReference(rotations, ControlType.kPosition);
+
+
+
+    if (SmartDashboard.getBoolean("1500", false)) {
+      SmartDashboard.putNumber("Desired Velocity", 1500.0);
+      SmartDashboard.putBoolean("1500", false);
+    }
+    if (SmartDashboard.getBoolean("1000", false)) {
+      SmartDashboard.putNumber("Desired Velocity", 1000.0);
+      SmartDashboard.putBoolean("1000", false);
+    }
+    if (SmartDashboard.getBoolean("500", false)) {
+      SmartDashboard.putNumber("Desired Velocity", 500.0);
+      SmartDashboard.putBoolean("500", false);
+    }
+    if (SmartDashboard.getBoolean("0", false)) {
+      SmartDashboard.putNumber("Desired Velocity", 0.0);
+      SmartDashboard.putBoolean("0", false);
+    }
+    // double setPoint = m_stick.getY()*maxRPM;
+    double setPoint = SmartDashboard.getNumber("Desired Velocity", 0.0);
+    m_pidController.setReference(setPoint, ControlType.kVelocity);
     
-    SmartDashboard.putNumber("SetPoint", rotations);
-    SmartDashboard.putNumber("ProcessVariable", m_encoder.getPosition());
+    SmartDashboard.putNumber("SetPoint", setPoint);
+    SmartDashboard.putNumber("ProcessVariable", m_encoder.getVelocity());
   }
 }
