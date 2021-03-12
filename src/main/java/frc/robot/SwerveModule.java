@@ -24,8 +24,12 @@ public class SwerveModule {
   private static final int kEncoderResolution = 4096;
 
   private static final double kModuleMaxAngularVelocity = Math.PI; // 1/2 rotation per second;
-  private static final double kModuleMaxAngularAcceleration =
-      2 * Math.PI; // radians per second squared
+  private static final double kModuleMaxAngularAcceleration = 2 * Math.PI; // radians per second squared
+
+  // https://github.com/ameliorater/ftc-diff-swerve/blob/master/DriveModule.java#L43
+  //this variable is set to 0.7 because when in RUN_USING_ENCODERS mode, powers about ~0.7 are the same
+  //setting to 1 may increase robot top speed, but may decrease accuracy
+  public double MAX_MOTOR_POWER = 0.7;
 
   private final CANSparkMax m_driveMotorA;
   private final CANSparkMax m_driveMotorB;
@@ -73,10 +77,8 @@ public class SwerveModule {
     // m_turningPIDController.enableContinuousInput(-Math.PI, Math.PI);
   }
 
-  /**
-   * Returns the current state of the module.
-   */
-  public SwerveModuleState getState() {
+  private double calcVelocity()
+  {
     double a = m_driveEncoderA.getVelocity();
     double b = m_driveEncoderB.getVelocity();
 
@@ -105,8 +107,16 @@ public class SwerveModule {
     // another way to say this is the signes are the same.
 
     // A&B going opposite directions => wheel rotation (robot translation)
+
+    return speed;
+  }
+  /**
+   * Returns the current state of the module.
+   */
+  public SwerveModuleState getState() {
     
-    return new SwerveModuleState(speed, new Rotation2d(m_turningEncoder.get()));
+    
+    return new SwerveModuleState(calcVelocity(), new Rotation2d(m_turningEncoder.get()));
   }
 
   /**
@@ -116,23 +126,45 @@ public class SwerveModule {
    */
   public void setDesiredState(SwerveModuleState desiredState) {
     // Optimize the reference state to avoid spinning further than 90 degrees
-    SwerveModuleState state =
-        SwerveModuleState.optimize(desiredState, new Rotation2d(m_turningEncoder.get()));
-
-    // Calculate the drive output from the drive PID controller.
-    final double driveOutput =
-        m_drivePIDController.calculate(-999999, state.speedMetersPerSecond);
-
-    final double driveFeedforward = m_driveFeedforward.calculate(state.speedMetersPerSecond);
+    SwerveModuleState state = SwerveModuleState.optimize(desiredState, new Rotation2d(m_turningEncoder.get()));
 
     // Calculate the turning motor output from the turning PID controller.
-    final double turnOutput =
-        m_turningPIDController.calculate(m_turningEncoder.get(), state.angle.getRadians());
+    final double turnOutput = m_turningPIDController.calculate(m_turningEncoder.get(), state.angle.getRadians());
+    final double turnFeedforward = m_turnFeedforward.calculate(m_turningPIDController.getSetpoint().velocity);
+    final double turnMag = turnOutput + turnFeedforward;
 
-    final double turnFeedforward =
-        m_turnFeedforward.calculate(m_turningPIDController.getSetpoint().velocity);
+    // Calculate the drive output from the drive PID controller.
+    final double driveOutput = m_drivePIDController.calculate(calcVelocity(), state.speedMetersPerSecond);
+    final double driveFeedforward = m_driveFeedforward.calculate(state.speedMetersPerSecond);
+    final double driveMag = driveOutput + driveFeedforward;
 
-    m_driveMotorA.setVoltage(driveOutput + driveFeedforward);
-    m_driveMotorB.setVoltage(turnOutput + turnFeedforward);
+
+    Vector driveVec = new Vector(0, driveMag);
+    Vector turnVec = new Vector(Math.PI/2, turnMag);
+
+    driveVec.sum(turnVec); // now driveVec is the resultant vector (target)
+
+    Vec2d powerVector = new Vec2d(driveVec.getXChange(), driveVec.getYChange());
+    // Vector powerVector = new Vector(driveVec);
+
+    // src: https://github.com/ameliorater/ftc-diff-swerve/blob/master/DriveModule.java
+    //this is one way to convert desired ratio of module translation and module rotation to motor powers
+    //vectors are not strictly necessary for this, but made it easier to visualize
+    //more documentation on this visualization method coming soon
+    final Vec2d MOTOR_1_VECTOR = new Vec2d(1/Math.sqrt(2), 1/Math.sqrt(2));
+    final Vec2d MOTOR_2_VECTOR = new Vec2d(-1/Math.sqrt(2), 1/Math.sqrt(2));
+
+    Vec2d motor1Unscaled = powerVector.projection(MOTOR_1_VECTOR);
+    Vec2d motor2Unscaled = powerVector.projection(MOTOR_2_VECTOR);
+
+    //makes sure no vector magnitudes exceed the maximum motor power
+    Vec2d[] motorPowersScaled = Vec2d.batchNormalize(MAX_MOTOR_POWER, motor1Unscaled, motor2Unscaled);
+    double motor1power = motorPowersScaled[0].getMagnitude();
+    double motor2power = motorPowersScaled[1].getMagnitude();
+
+    //We may need to do some sign manipulation
+
+    m_driveMotorA.setVoltage(motor1power);
+    m_driveMotorB.setVoltage(motor2power);
   }
 }
