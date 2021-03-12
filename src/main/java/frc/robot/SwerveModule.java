@@ -10,12 +10,16 @@ import com.revrobotics.CANSparkMaxLowLevel.MotorType;
 
 import edu.wpi.first.wpilibj.Encoder;
 import edu.wpi.first.wpilibj.PWMVictorSPX;
+import edu.wpi.first.wpilibj.Sendable;
 import edu.wpi.first.wpilibj.SpeedController;
 import edu.wpi.first.wpilibj.controller.PIDController;
 import edu.wpi.first.wpilibj.controller.ProfiledPIDController;
 import edu.wpi.first.wpilibj.controller.SimpleMotorFeedforward;
 import edu.wpi.first.wpilibj.geometry.Rotation2d;
 import edu.wpi.first.wpilibj.kinematics.SwerveModuleState;
+import edu.wpi.first.wpilibj.shuffleboard.Shuffleboard;
+import edu.wpi.first.wpilibj.smartdashboard.SendableBuilder;
+import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj.trajectory.TrapezoidProfile;
 
 
@@ -36,7 +40,7 @@ public class SwerveModule {
 
   private final CANEncoder m_driveEncoderA;
   private final CANEncoder m_driveEncoderB;
-  private final Encoder m_turningEncoder;
+  public final Encoder m_turningEncoder;
 
   private final PIDController m_drivePIDController = new PIDController(1, 0, 0);
 
@@ -74,10 +78,13 @@ public class SwerveModule {
 
     // // Limit the PID Controller's input range between -pi and pi and set the input
     // // to be continuous.
-    // m_turningPIDController.enableContinuousInput(-Math.PI, Math.PI);
+    m_turningPIDController.enableContinuousInput(-Math.PI, Math.PI);
+
+    SmartDashboard.putData("TurningPID", m_drivePIDController);
+    SmartDashboard.putData("DrivePID", m_drivePIDController);
   }
 
-  private double calcVelocity()
+  public double calcVelocity()
   {
     double a = m_driveEncoderA.getVelocity();
     double b = m_driveEncoderB.getVelocity();
@@ -110,6 +117,41 @@ public class SwerveModule {
 
     return speed;
   }
+
+  public double calcTurn()
+  {
+    double a = m_driveEncoderA.getVelocity();
+    double b = m_driveEncoderB.getVelocity();
+
+    // see https://github.com/ameliorater/ftc-diff-swerve/wiki/Motor-Power-Vectors
+    // We can build two vectors, one for a and b whose magnitude is the velosity of a and be respectivly
+    // the vectors shall start at the origin
+    // vector for motor a is in quadrant 1 or 3
+    // vector for motor b is in quadrant 2 or 4
+    // the addition of these two vectors creates a new vector that explains module state
+    // on the coordinate plane:
+    // Y+ is CW rotation
+    // Y- is CCW Rotation
+    // X+ is Forward
+    // X- is Reverse
+    // By breaking the resulting vecor down into its component parts we can determine
+    // how much rotate vs how much translate
+
+    Vector vecA = new Vector(Math.PI/2, a);
+    Vector vecB = new Vector(Math.PI*3/4, b);
+    vecA.sum(vecB);
+
+    // double speed = vecA.getXChange();
+    double turn = vecA.getYChange();
+
+    // A&B going the same direction => module rotation
+    // another way to say this is the signes are the same.
+
+    // A&B going opposite directions => wheel rotation (robot translation)
+
+    return turn;
+  }
+
   /**
    * Returns the current state of the module.
    */
@@ -144,6 +186,7 @@ public class SwerveModule {
 
     driveVec.sum(turnVec); // now driveVec is the resultant vector (target)
 
+    // we need the projection method from the Vec2d class... this could be written better
     Vec2d powerVector = new Vec2d(driveVec.getXChange(), driveVec.getYChange());
     // Vector powerVector = new Vector(driveVec);
 
@@ -162,9 +205,23 @@ public class SwerveModule {
     double motor1power = motorPowersScaled[0].getMagnitude();
     double motor2power = motorPowersScaled[1].getMagnitude();
 
-    //We may need to do some sign manipulation
+    //@todo We may need to do some sign manipulation
+
+    SmartDashboard.putNumber("MotorAOutput", motor1power);
+    SmartDashboard.putNumber("MotorBOutput", motor2power);
 
     m_driveMotorA.setVoltage(motor1power);
     m_driveMotorB.setVoltage(motor2power);
   }
+
+ 
+  // @Override
+  // public void initSendable(SendableBuilder builder) {
+  //   builder.setSmartDashboardType("SwerveModule");
+  //   builder.add
+  //   builder.addDoubleProperty("p", this::getP, this::setP);
+  //   builder.addDoubleProperty("i", this::getI, this::setI);
+  //   builder.addDoubleProperty("d", this::getD, this::setD);
+  //   builder.addDoubleProperty("goal", () -> getGoal().position, this::setGoal);
+  // }
 }

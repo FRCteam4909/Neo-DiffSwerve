@@ -95,8 +95,8 @@ public class Robot extends TimedRobot {
     // SmartDashboard.putBoolean("500", false);
     // SmartDashboard.putBoolean("0", false);
 
-    SmartDashboard.putNumber("speed", 0);
-    SmartDashboard.putNumber("angle", 0);
+    SmartDashboard.putNumber("RequestedSpeed", 0);
+    SmartDashboard.putNumber("RequestedAngle", 0);
   }
 
   @Override
@@ -104,12 +104,16 @@ public class Robot extends TimedRobot {
 
 
 
-    double speedMetersPerSecond = SmartDashboard.getNumber("speed", 0);
-    double angle = SmartDashboard.getNumber("angle", 0);
+    double speedMetersPerSecond = SmartDashboard.getNumber("RequestedSpeed", 0);
+    double angle = SmartDashboard.getNumber("RequestedAngle", 0);
     Rotation2d angleRot2d = Rotation2d.fromDegrees(angle);
     SwerveModuleState desiredState = new SwerveModuleState(speedMetersPerSecond, angleRot2d);
     
     modOne.setDesiredState(desiredState);
+
+    SmartDashboard.putNumber("ActualAngle", modOne.calcTurn());
+    SmartDashboard.putData("TurnEncoder", modOne.m_turningEncoder);
+    SmartDashboard.putNumber("ActualVelocity", modOne.calcVelocity());
 
 
 
